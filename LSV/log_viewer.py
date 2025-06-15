@@ -14,6 +14,19 @@ import datetime
 import os
 import xml.etree.ElementTree as ET
 import html
+import sys # <-- Importante para la función de ayuda
+
+# --- FUNCIÓN DE AYUDA PARA ENCONTRAR RECURSOS (EL ICONO) ---
+def resource_path(relative_path):
+    """ Obtiene la ruta absoluta al recurso, funciona para desarrollo y para PyInstaller """
+    try:
+        # PyInstaller crea una carpeta temporal y guarda la ruta en _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+# ----------------------------------------------------------------
 
 @dataclass
 class LogEntry:
@@ -23,6 +36,7 @@ class LogEntry:
     message: str
     raw_data: str = ""
 
+# ... (El resto de las clases NetworkReceiver y ConnectionDialog no cambian) ...
 class NetworkReceiver:
     def __init__(self, host: str, port: int, log_queue: queue.Queue, name: str):
         normalized = host.strip().lower() if host else ''
@@ -151,6 +165,14 @@ class LogViewerApp:
         self.root = root
         self.root.title("Network Log Viewer, Ing Guillermo Madariaga")
         self.root.geometry("1400x800")
+        
+        # --- CAMBIO PARA EL ICONO ---
+        try:
+            # Usa la función de ayuda para encontrar el icono
+            self.root.iconbitmap(resource_path("icon.ico"))
+        except tk.TclError:
+            print("Icono 'icon.ico' no encontrado. Usando icono por defecto.")
+        # --- FIN DEL CAMBIO ---
 
         self.receivers: Dict[str, NetworkReceiver] = {}
         self.logs: List[Tuple[str, LogEntry]] = []
@@ -198,10 +220,7 @@ class LogViewerApp:
                              "map": {"background": [("active", BG_COLOR)], "indicatorcolor": [("selected", SELECT_BG), ("!selected", WIDGET_BG)]}}
         })
         self.style.theme_use("lightlog")
-        
-        # CORRECTED: Define a derived style for the status bar
         self.style.configure("Status.TFrame", background=BUTTON_BG, relief='sunken')
-        
         self.root.option_add('*TCombobox*Listbox.background', WIDGET_BG)
         self.root.option_add('*TCombobox*Listbox.foreground', FG_COLOR)
         self.root.option_add('*TCombobox*Listbox.selectBackground', SELECT_BG)
@@ -257,7 +276,6 @@ class LogViewerApp:
         self.log_tree.bind('<Button-1>', self.on_log_select)
         self.log_tree.bind('<Button-3>', self._show_context_menu)
 
-        # CORRECTED: Use the new derived style for the status bar
         status_bar = ttk.Frame(self.root, style="Status.TFrame"); status_bar.pack(side='bottom', fill='x', ipady=2)
         ttk.Label(status_bar, textvariable=self.status_var, background=self.style.lookup("Status.TFrame", "background")).pack(anchor='w', padx=5)
         
@@ -499,16 +517,12 @@ class LogViewerApp:
         except Exception as e: self.status_var.set(f"Error al guardar configuración: {e}")
 
     def update_log_display(self):
-        # FIX: Preserve selection across updates
         selected_id = self.log_tree.selection()[0] if self.log_tree.selection() else None
-        
         self.log_tree.delete(*self.log_tree.get_children())
-        
         new_selected_id = None
         for i, (_, entry) in enumerate(self.filtered_logs[-1000:]):
             icon = self.level_icons.get(entry.level, '▪️')
             values = (entry.timestamp, f"{icon} {entry.level}", entry.logger, entry.message)
-            # Use a unique ID for each row to allow re-selection
             item_id = self.log_tree.insert('', 'end', iid=f"log_{i}", values=values, tags=(entry.level,))
             if selected_id == item_id:
                 new_selected_id = item_id
